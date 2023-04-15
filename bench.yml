@@ -1,0 +1,66 @@
+---
+- name: Save program outputs to a local file
+  hosts: all
+  become: yes
+  gather_facts: no
+  tasks:
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - wget
+          - sysbench
+          - fio
+          - speedtest-cli
+        state: present
+        update_cache: yes
+
+    - name: Download and extract Geekbench
+      ansible.builtin.shell: |
+        wget https://cdn.geekbench.com/Geekbench-5.3.1-Linux.tar.gz
+        tar xf Geekbench-5.3.1-Linux.tar.gz
+      args:
+        creates: Geekbench-5.3.1-Linux
+
+    - name: Run Geekbench
+      ansible.builtin.command: ./Geekbench-5.3.1-Linux/geekbench5
+      register: geekbench_output
+
+    - name: Run sysbench memory tests
+      ansible.builtin.shell: sysbench --test=memory --memory-block-size=1M --memory-total-size=10G run
+      register: sysbench_memory_output
+
+    - name: Run sysbench memory read tests
+      ansible.builtin.shell: sysbench --test=memory --memory-block-size=1M --memory-total-size=10G --memory-oper=read run
+      register: sysbench_memory_read_output
+
+    - name: Run fio random read write test
+      ansible.builtin.shell: fio --randrepeat=1 --ioengine=libaio --direct=1 --gtod_reduce=1 --name=test --filename=random_read_write.fio --bs=4k --iodepth=64 --size=250M --readwrite=randrw --rwmixread=80
+      register: fio_output
+
+    - name: Run speedtest
+      ansible.builtin.command: speedtest
+      register: speedtest_output
+
+    - name: Combine command outputs
+      ansible.builtin.set_fact:
+        combined_output: |
+          ===== Geekbench =====
+          {{ geekbench_output.stdout }}
+
+          ===== Sysbench Memory =====
+          {{ sysbench_memory_output.stdout }}
+
+          ===== Sysbench Memory Read =====
+          {{ sysbench_memory_read_output.stdout }}
+
+          ===== Fio Random Read Write =====
+          {{ fio_output.stdout }}
+
+          ===== Speedtest =====
+          {{ speedtest_output.stdout }}
+
+    - name: Save the command outputs to a local file
+      delegate_to: localhost
+      ansible.builtin.copy:
+        content: "{{ combined_output }}"
+        dest: "/path/to/local/output-file.txt"
