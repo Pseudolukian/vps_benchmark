@@ -2,7 +2,7 @@
 - name: Save program outputs to a local file
   hosts: all
   become: yes
-  gather_facts: no
+  gather_facts: yes
   tasks:
     - name: Install required packages
       ansible.builtin.apt:
@@ -41,26 +41,24 @@
       ansible.builtin.command: speedtest
       register: speedtest_output
 
-    - name: Combine command outputs
+    - name: Combine command outputs for CSV
       ansible.builtin.set_fact:
-        combined_output: |
-          ===== Geekbench =====
-          {{ geekbench_output.stdout }}
+        combined_output_csv: |
+          IP,"{{ ansible_default_ipv4.address }}"
+          CPU,"{{ geekbench_output.stdout }}"
+          RAM READ,"{{ sysbench_memory_output.stdout }}"
+          RAM WRITE,"{{ sysbench_memory_read_output.stdout }}"
+          Disk,"{{ fio_output.stdout }}"
+          NET,"{{ speedtest_output.stdout }}"
 
-          ===== Sysbench Memory =====
-          {{ sysbench_memory_output.stdout }}
-
-          ===== Sysbench Memory Read =====
-          {{ sysbench_memory_read_output.stdout }}
-
-          ===== Fio Random Read Write =====
-          {{ fio_output.stdout }}
-
-          ===== Speedtest =====
-          {{ speedtest_output.stdout }}
-
-    - name: Save the command outputs to a local file
+    - name: Save the command outputs to a local file with current timestamp
       delegate_to: localhost
       ansible.builtin.copy:
-        content: "{{ combined_output }}"
-        dest: "/path/to/local/output-file.txt"
+        content: "{{ combined_output_csv }}"
+        dest: "./bench_data/bench_data_{{ansible_date_time.iso8601_basic_short}}.csv"
+
+    - name: Append the command outputs to a global file
+      delegate_to: localhost
+      ansible.builtin.shell: |
+        echo "{{ combined_output_csv }}" >> ./bench_data/global_bench_data.csv
+...
